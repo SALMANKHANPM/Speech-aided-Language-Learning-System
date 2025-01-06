@@ -128,10 +128,18 @@ const AudioChatbot: React.FC<AudioChatbotProps> = ({ onTranscription }) => {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    const ACCEPTED_AUDIO_TYPES = [
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/ogg',
+      'audio/webm',
+      'audio/wav',
+      'audio/aac'
+    ];
     if (!file) return;
     
-    if (!file.type.includes('audio/wav')) {
-      alert('Please upload a WAV file');
+    if (!ACCEPTED_AUDIO_TYPES.includes(file.type)) {
+      alert(`Please upload a valid audio file (${ACCEPTED_AUDIO_TYPES.join(', ')})`);
       return;
     }
   
