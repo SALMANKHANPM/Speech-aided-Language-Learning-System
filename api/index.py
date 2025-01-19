@@ -13,6 +13,9 @@ from scipy.io import wavfile
 from datetime import datetime
 import base64
 import io
+import shutil
+import librosa
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,16 +45,16 @@ def transcribe_m4t(audio_file, language: str = "tel") -> Dict:
         audio = {"array": torch.tensor(audio_array), "sampling_rate": sampling_rate}
 
         audio = torchaudio.functional.resample(
-            audio["array"], 
-            orig_freq=audio['sampling_rate'], 
+            audio["array"],
+            orig_freq=audio['sampling_rate'],
             new_freq=model.config.sampling_rate
         )
 
         audio_inputs = processor(audios=audio, return_tensors="pt").to(device)
-        
+
         output_tokens_tel = model.generate(**audio_inputs, tgt_lang=language, generate_speech=False)
         output_tokens_eng = model.generate(**audio_inputs, tgt_lang="eng", generate_speech=False)
-        
+
         return {
             "transcription": processor.decode(output_tokens_tel[0].tolist()[0], skip_special_tokens=True),
             "translation": processor.decode(output_tokens_eng[0].tolist()[0], skip_special_tokens=True)
@@ -70,28 +73,19 @@ def read_root():
 AUDIO_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-
-import soundfile as sf
-import numpy as np
-from scipy.io import wavfile
-import librosa
-
 @app.post("/api/py/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     if not file.filename.endswith('.wav'):
         raise HTTPException(status_code=400, detail="Only WAV files are supported")
-    
+
     try:
-        # Generate unique filename with timestamp
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"audio_{timestamp}.wav"
-        file_path = os.path.join(AUDIO_DIR, filename)
-        
-        # Save original file
+        file_path = os.path.join(AUDIO_DIR, f"audio_{timestamp}.wav")
+
         with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-            
+            shutil.copyfileobj(file.file, buffer)
+
         # Load and validate audio
         try:
             audio_data, sample_rate = librosa.load(file_path, sr=16000)
@@ -100,13 +94,14 @@ async def transcribe_audio(file: UploadFile = File(...)):
         except Exception as e:
             logger.error(f"Audio validation failed: {str(e)}")
             raise HTTPException(status_code=400, detail="Invalid audio format")
-        
+
         logger.info(f"Processing file: {file_path}")
         output = transcribe_m4t(file_path)
         logger.info(f"Transcription result: {output}")
-        
+
         return JSONResponse(content=output)
-            
+
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
